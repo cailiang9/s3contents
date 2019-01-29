@@ -9,6 +9,7 @@ from notebook.services.contents.manager import ContentsManager
 from traitlets import Dict
 from datetime import datetime
 from functools import wraps
+import posixpath
 class PathOutsideRoot(Exception):
     pass
 
