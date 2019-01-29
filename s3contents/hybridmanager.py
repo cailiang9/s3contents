@@ -8,6 +8,7 @@ from tornado.web import HTTPError
 from notebook.services.contents.manager import ContentsManager
 from traitlets import Dict
 from datetime import datetime
+from functools import wraps
 class PathOutsideRoot(Exception):
     pass
 
