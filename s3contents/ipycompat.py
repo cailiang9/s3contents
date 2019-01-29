@@ -5,7 +5,7 @@ Taken from: https://github.com/quantopian/pgcontents/blob/master/pgcontents/util
 """
 
 import notebook
-if notebook.version_info[0] >= 6:  # noqa
+if notebook.version_info[0] >= 7:  # noqa
     raise ImportError("Jupyter Notebook versions 6 and up are not supported.")
 
 from traitlets.config import Config
