@@ -2,11 +2,11 @@
 Multi-backend ContentsManager.
 """
 from __future__ import unicode_literals
-
+from .handlers import HybridFilesHandler
 from six import iteritems
 from tornado.web import HTTPError
 from notebook.services.contents.manager import ContentsManager
-from traitlets import Dict
+from traitlets import Dict, default
 from datetime import datetime
 from functools import wraps
 import posixpath
@@ -267,6 +267,10 @@ class HybridContentsManager(ContentsManager):
 
     __get = path_dispatch1('get', True)
     __delete = path_dispatch1('delete', False)
+
+    @default('files_handler_class')
+    def _files_handler_class_default(self):
+        return HybridFilesHandler
 
     @outside_root_to_404
     def get(self, path, content=True, type=None, format=None):

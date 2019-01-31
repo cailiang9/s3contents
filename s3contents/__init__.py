@@ -13,4 +13,5 @@ except:
 
 from .s3manager import S3ContentsManager
 from .gcsmanager import GCSContentsManager
+from .genericmanager import GFContentsManager
 from .hybridmanager import HybridContentsManager

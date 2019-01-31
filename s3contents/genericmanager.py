@@ -121,7 +121,7 @@ class GenericContentsManager(ContentsManager, HasTraits):
         if content:
             if not self.fs.isfile(path):
                 self.no_such_entity(path)
-            file_content = self.fs.read(path)
+            file_content, format = self.fs.read(path, format)
             nb_content = reads(file_content, as_version=NBFORMAT_VERSION)
             self.mark_trusted_cells(nb_content, path)
             model["format"] = "json"
@@ -141,7 +141,7 @@ class GenericContentsManager(ContentsManager, HasTraits):
             model["last_modified"] = model["created"] = DUMMY_CREATED_DATE
         if content:
             try:
-                content = self.fs.read(path)
+                content, format = self.fs.read(path, format)
             except NoSuchFile as e:
                 self.no_such_entity(e.path)
             except GenericFSError as e:
@@ -149,7 +149,7 @@ class GenericContentsManager(ContentsManager, HasTraits):
             model["format"] = format or "text"
             model["content"] = content
             model["mimetype"] = mimetypes.guess_type(path)[0] or "text/plain"
-            if format == "base64":
+            if False: #format == "base64":
                 model["format"] = format or "base64"
                 from base64 import b64decode
                 model["content"] = b64decode(content)
@@ -215,7 +215,11 @@ class GenericContentsManager(ContentsManager, HasTraits):
     def _save_file(self, model, path):
         file_contents = model["content"]
         file_format = model.get('format')
-        self.fs.write(path, file_contents, file_format)
+        chunk = model.get('chunk', None)
+        if chunk is not None and chunk != 1:
+            self.fs.write(path, file_contents, file_format, mode='ab')  # FIXME: too slow since no append on S3
+        else:
+            self.fs.write(path, file_contents, file_format)
 
     def _save_directory(self, path):
         self.fs.mkdir(path)
@@ -249,7 +253,7 @@ class GenericContentsManager(ContentsManager, HasTraits):
         """Is path a hidden directory or file?
         """
         self.log.debug("S3contents.GenericManager: is_hidden '%s'", path)
-        return False
+        return path and path.rsplit('/',1)[-1][0] == '.'
 
 
 def base_model(path):
@@ -272,3 +276,19 @@ def base_directory_model(path):
         last_modified=DUMMY_CREATED_DATE,
         created=DUMMY_CREATED_DATE,)
     return model
+
+from s3contents.gcs_fs import GFFS
+class GFContentsManager(GenericContentsManager):
+    project = Unicode(
+        help="GCP Project", allow_none=True, default_value=None).tag(
+            config=True, env="JPYNB_GCS_PROJECT")
+    prefix = Unicode("", help="Prefix path inside the specified bucket").tag(config=True)
+    separator = Unicode("/", help="Path separator").tag(config=True)
+
+    def __init__(self, *args, **kwargs):
+        super(GFContentsManager, self).__init__(*args, **kwargs)
+        self._fs = GFFS(
+            log=self.log,
+            project=self.project,
+            prefix=self.prefix,
+            separator=self.separator)
