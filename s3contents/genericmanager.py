@@ -8,6 +8,7 @@ from tornado.web import HTTPError
 from s3contents.genericfs import GenericFSError, NoSuchFile
 from s3contents.ipycompat import ContentsManager
 from s3contents.ipycompat import HasTraits, Unicode
+from traitlets import default
 from s3contents.ipycompat import reads, from_dict, GenericFileCheckpoints
 
 DUMMY_CREATED_DATE = datetime.datetime.fromtimestamp(86400)
@@ -277,6 +278,15 @@ def base_directory_model(path):
         created=DUMMY_CREATED_DATE,)
     return model
 
+from notebook.services.contents.filecheckpoints import GenericFileCheckpoints
+class RemoteFileCheckpoints(GenericFileCheckpoints):
+    @default('root_dir')
+    def _root_dir_default(self):
+        try:
+            return self.parent.root_dir+'/.ckpt_remote'
+        except AttributeError:
+            return getcwd()+'/.ckpt_remote'
+
 from s3contents.gcs_fs import GFFS
 class GFContentsManager(GenericContentsManager):
     project = Unicode(
@@ -292,3 +302,7 @@ class GFContentsManager(GenericContentsManager):
             project=self.project,
             prefix=self.prefix,
             separator=self.separator)
+
+    @default('checkpoints_class')
+    def _checkpoints_class_default(self):
+        return RemoteFileCheckpoints
