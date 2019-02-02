@@ -1,14 +1,28 @@
 import os
 import six
+import time
 import gcsfs
 import tensorflow as tf
 
 from s3contents.compat import FileNotFoundError
 from s3contents.ipycompat import Unicode
 from s3contents.genericfs import GenericFS, NoSuchFile
+from collections import OrderedDict
 from notebook.utils import is_file_hidden
 from base64 import encodebytes, decodebytes
 LARGEFSIZE = 8*1024**2
+
+class OrderedDictCache(OrderedDict):
+    'Store items in the order the keys were last added'
+
+    def __setitem__(self, key, value):
+        if key in self:
+            del self[key]
+        OrderedDict.__setitem__(self, key, value)
+        if OrderedDict.__len__(self) > 1000:
+            print('popitem')
+            self.popitem(False)
+
 class GFFS(GenericFS):
     project = Unicode(
         help="GFile Project", allow_none=True, default_value=None).tag(
@@ -27,6 +41,7 @@ class GFFS(GenericFS):
         super(GFFS, self).__init__(**kwargs)
         self.log = log
         self.fs = tf.gfile
+        self.dstat = OrderedDictCache()
         self.init()
 
     def init(self):
@@ -43,15 +58,12 @@ class GFFS(GenericFS):
         return self.unprefix(files)
 
     def isfile(self, path):
-        path_ = self.path(path)
-        return self.fs.Exists(path_) and not self.fs.IsDirectory(path_)
+        st = self.lstat(path)
+        return st['type'] == 'file'
 
     def isdir(self, path):
-        # GFFS doesnt return exists=True for a directory with no files so
-        # we need to check if the dir_keep_file exists
-        #is_dir = self.isfile(path + self.separator + self.dir_keep_file)
-        path_ = self.path(path)
-        return self.fs.IsDirectory(path_)
+        st = self.lstat(path)
+        return st['type'] == 'directory'
 
     def mv(self, old_path, new_path):
         self.log.debug("S3contents.GFFS: Move file `%s` to `%s`", old_path, new_path)
@@ -115,12 +127,20 @@ class GFFS(GenericFS):
         return encodebytes(bcontent).decode('ascii'), 'base64'
 
     def lstat(self, path):
+        calltime = time.time()
+        if path in self.dstat: 
+            st = self.dstat[path]
+            if calltime - st["calltime"] < 5:
+                return st
         path_ = self.path(path)
         self.log.debug("S3contents.GFFS: lstat file: `%s` `%s`", path, path_)
-        info = self.fs.Stat(path_)
-        ret = {}
-        ret["ST_MTIME"] = info.mtime_nsec//1000000
-        return ret
+        try:
+            info = self.fs.Stat(path_)
+            self.dstat[path] = {"calltime":calltime, "ST_MTIME": info.mtime_nsec//1000000, 
+                                "size": info.length, "type":"directory" if info.is_directory else "file"}
+        except tf.errors.NotFoundError:
+            self.dstat[path] = {"calltime":calltime, "ST_MTIME": 0, "type":None}
+        return self.dstat[path]
 
     def write(self, path, content, format = None, mode = 'wb'):
         path_ = self.path(self.unprefix(path))

@@ -116,7 +116,9 @@ class GenericContentsManager(ContentsManager, HasTraits):
         model = base_model(path)
         model["type"] = "notebook"
         if self.fs.isfile(path):
-            model["last_modified"] = model["created"] = self.fs.lstat(path)["ST_MTIME"]
+            st = self.fs.lstat(path)
+            model["last_modified"] = model["created"] = st["ST_MTIME"]
+            model["size"] = st["size"]
         else:
             model["last_modified"] = model["created"] = DUMMY_CREATED_DATE
         if content:
@@ -130,14 +132,16 @@ class GenericContentsManager(ContentsManager, HasTraits):
             self.validate_notebook_model(model)
         return model
 
-    def _file_model_from_path(self, path, content=False, format=None):
+    def _file_model_from_path(self, path, content=False, format=None, stat=True):
         """
         Build a file model from database record.
         """
         model = base_model(path)
         model["type"] = "file"
-        if self.fs.isfile(path):
-            model["last_modified"] = model["created"] = self.fs.lstat(path)["ST_MTIME"]
+        if stat and self.fs.isfile(path):
+            st = self.fs.lstat(path)
+            model["last_modified"] = model["created"] = st["ST_MTIME"]
+            model["size"] = st["size"]
         else:
             model["last_modified"] = model["created"] = DUMMY_CREATED_DATE
         if content:
@@ -162,19 +166,25 @@ class GenericContentsManager(ContentsManager, HasTraits):
         depending on the result of `guess_type`.
         """
         ret = []
+        nstat = 0
         for path in paths:
-            # path = self.fs.remove_prefix(path, self.prefix)  # Remove bucket prefix from paths
             if os.path.basename(path) == self.fs.dir_keep_file:
                 continue
-            type_ = self.guess_type(path, allow_directory=True)
+            if nstat < 100:  # avoid too much calling to remote file api when nstat > 100
+                type_ = self.guess_type(path, allow_directory=True)
+            elif type_.find('.') < 0:
+                type_ == "directory"
+            else:
+                type_ = self.guess_type(path, allow_directory=False)
             if type_ == "notebook":
                 ret.append(self._notebook_model_from_path(path, False))
             elif type_ == "file":
-                ret.append(self._file_model_from_path(path, False, None))
+                ret.append(self._file_model_from_path(path, False, None, nstat < 100))
             elif type_ == "directory":
                 ret.append(self._directory_model_from_path(path, False))
             else:
                 self.do_error("Unknown file type %s for file '%s'" % (type_, path), 500)
+            nstat+=1
         return ret
 
     def save(self, model, path):
