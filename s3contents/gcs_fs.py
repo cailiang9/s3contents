@@ -40,7 +40,7 @@ class GFFS(GenericFS):
     def __init__(self, log, **kwargs):
         super(GFFS, self).__init__(**kwargs)
         self.log = log
-        self.fs = tf.gfile
+        self.fs = tf.io.gfile
         self.dstat = OrderedDictCache()
         self.init()
 
@@ -54,7 +54,7 @@ class GFFS(GenericFS):
     def ls(self, path, contain_hidden = False):
         path_ = self.path(path)
         self.log.debug("S3contents.GFFS: Listing directory: `%s`", path_)
-        files = [path+self.separator+f for f in self.fs.ListDirectory(path_) if contain_hidden or not is_file_hidden(f)]
+        files = [path+self.separator+f for f in self.fs.listdir(path_) if contain_hidden or not is_file_hidden(f)]
         return self.unprefix(files)
 
     def isfile(self, path):
@@ -83,24 +83,24 @@ class GFFS(GenericFS):
                     new_item_path = old_item_path.replace(old_dir_path, new_dir_path, 1)
                     self.cp(old_item_path, new_item_path)
             else:
-                self.fs.MkDir(new_path_)  # empty dir
+                self.fs.mkdir(new_path_)  # empty dir
         elif self.isfile(old_path):
-            self.fs.Copy(old_path_, new_path_)
+            self.fs.copy(old_path_, new_path_)
 
     def rm(self, path):
         path_ = self.path(path)
         self.log.debug("S3contents.GFFS: Removing: `%s`", path_)
         if self.isfile(path):
             self.log.debug("S3contents.GFFS: Removing file: `%s`", path_)
-            self.fs.Remove(path_)
+            self.fs.remove(path_)
         elif self.isdir(path):
             self.log.debug("S3contents.GFFS: Removing directory: `%s`", path_)
-            self.fs.DeleteRecursively(path_)
+            self.fs.rmtree(path_)
 
     def mkdir(self, path):
         path_ = self.path(path) #, self.dir_keep_file)
         self.log.debug("S3contents.GFFS: Making dir (touch): `%s`", path_)
-        self.fs.MakeDirs(path_)
+        self.fs.makedirs(path_)
 
     def read(self, path, format = None):
         path_ = self.path(path)
@@ -135,7 +135,7 @@ class GFFS(GenericFS):
         path_ = self.path(path)
         self.log.debug("S3contents.GFFS: lstat file: `%s` `%s`", path, path_)
         try:
-            info = self.fs.Stat(path_)
+            info = self.fs.stat(path_)
             self.dstat[path] = {"calltime":calltime, "ST_MTIME": info.mtime_nsec//1000000, 
                                 "size": info.length, "type":"directory" if info.is_directory else "file"}
         except tf.errors.NotFoundError:
@@ -275,9 +275,9 @@ class GCSFS(GenericFS):
                     new_item_path = old_item_path.replace(old_dir_path, new_dir_path, 1)
                     self.cp(old_item_path, new_item_path)
             else:
-                self.fs.Copy(old_path_, new_path_)  # empty dir
+                self.fs.copy(old_path_, new_path_)  # empty dir
         elif self.isfile(old_path):
-            self.fs.Copy(old_path_, new_path_)
+            self.fs.copy(old_path_, new_path_)
 
     def rm(self, path):
         path_ = self.path(path)
